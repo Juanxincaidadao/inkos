@@ -17,8 +17,12 @@ export class ArchitectAgent extends BaseAgent {
     return "architect";
   }
 
-  async generateFoundation(book: BookConfig): Promise<ArchitectOutput> {
-    const systemPrompt = `你是一个专业的网络小说架构师。你的任务是为一本新小说生成完整的基础设定。
+  async generateFoundation(book: BookConfig, externalContext?: string): Promise<ArchitectOutput> {
+    const contextBlock = externalContext
+      ? `\n\n## 外部指令\n以下是来自外部系统（如 OpenClaw）的创作指令，请将其融入设定中：\n\n${externalContext}\n`
+      : "";
+
+    const systemPrompt = `你是一个专业的网络小说架构师。你的任务是为一本新小说生成完整的基础设定。${contextBlock}
 
 要求：
 - 平台：${book.platform}

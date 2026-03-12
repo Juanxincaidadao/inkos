@@ -8,6 +8,7 @@ export interface WriteChapterInput {
   readonly book: BookConfig;
   readonly bookDir: string;
   readonly chapterNumber: number;
+  readonly externalContext?: string;
 }
 
 export interface WriteChapterOutput {
@@ -52,6 +53,7 @@ export class WriterAgent extends BaseAgent {
       hooks,
       recentChapters,
       wordCount: book.chapterWordCount,
+      externalContext: input.externalContext,
     });
 
     const response = await this.chat(
@@ -250,9 +252,14 @@ ${styleGuide}
     readonly hooks: string;
     readonly recentChapters: string;
     readonly wordCount: number;
+    readonly externalContext?: string;
   }): string {
-    return `请续写第${params.chapterNumber}章。
+    const contextBlock = params.externalContext
+      ? `\n## 外部指令\n以下是来自外部系统的创作指令，请在本章中融入：\n\n${params.externalContext}\n`
+      : "";
 
+    return `请续写第${params.chapterNumber}章。
+${contextBlock}
 ## 当前状态卡
 ${params.currentState}
 
