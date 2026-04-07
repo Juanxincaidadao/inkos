@@ -21,6 +21,7 @@ import { useTheme } from "./hooks/use-theme";
 import { useI18n } from "./hooks/use-i18n";
 import { postApi, useApi } from "./hooks/use-api";
 import { Sun, Moon, Bell, MessageSquare } from "lucide-react";
+import { DEFAULT_CHAT_OPEN } from "./app-state";
 
 export type Route =
   | { page: "dashboard" }
@@ -52,7 +53,7 @@ export function App() {
   const { data: project, refetch: refetchProject } = useApi<{ language: string; languageExplicit: boolean }>("/project");
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
   const [ready, setReady] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(DEFAULT_CHAT_OPEN);
 
   const isDark = theme === "dark";
 
