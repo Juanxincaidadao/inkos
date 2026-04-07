@@ -191,6 +191,51 @@ describe("CLI integration", () => {
     });
   });
 
+  describe("inkos interact", () => {
+    it("returns structured JSON for shared interaction mode switches", async () => {
+      const initialized = await stat(join(projectDir, "inkos.json")).then(() => true).catch(() => false);
+      if (!initialized) run(["init"]);
+      await writeFile(
+        join(projectDir, ".env"),
+        Object.entries(failingLlmEnv).map(([key, value]) => `${key}=${value}`).join("\n"),
+        "utf-8",
+      );
+      const output = run(["interact", "--json", "--message", "切换到全自动"]);
+      const data = JSON.parse(output);
+
+      expect(data.request.intent).toBe("switch_mode");
+      expect(data.request.mode).toBe("auto");
+      expect(data.session.automationMode).toBe("auto");
+    });
+
+    it("binds the requested book when interact is called with --book", async () => {
+      const initialized = await stat(join(projectDir, "inkos.json")).then(() => true).catch(() => false);
+      if (!initialized) run(["init"]);
+      await writeFile(
+        join(projectDir, ".env"),
+        Object.entries(failingLlmEnv).map(([key, value]) => `${key}=${value}`).join("\n"),
+        "utf-8",
+      );
+      const state = new StateManager(projectDir);
+      await state.saveBookConfig("harbor", {
+        id: "harbor",
+        title: "Harbor",
+        platform: "tomato",
+        genre: "other",
+        status: "active",
+        targetChapters: 20,
+        chapterWordCount: 3000,
+        createdAt: "2026-04-07T00:00:00.000Z",
+        updatedAt: "2026-04-07T00:00:00.000Z",
+      });
+
+      const output = run(["interact", "--json", "--book", "harbor", "--message", "explain status"]);
+      const data = JSON.parse(output);
+
+      expect(data.session.activeBookId).toBe("harbor");
+    });
+  });
+
   describe("inkos config set-model", () => {
     it("rejects raw API keys passed to --api-key-env", async () => {
       const { exitCode, stderr } = runStderr([
