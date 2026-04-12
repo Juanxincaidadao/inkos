@@ -12,6 +12,7 @@ const writeNextChapterMock = vi.fn();
 const rollbackToChapterMock = vi.fn();
 const saveChapterIndexMock = vi.fn();
 const loadChapterIndexMock = vi.fn();
+const loadBookConfigMock = vi.fn();
 const createLLMClientMock = vi.fn(() => ({}));
 const chatCompletionMock = vi.fn();
 const loadProjectConfigMock = vi.fn();
@@ -38,7 +39,7 @@ vi.mock("@actalk/inkos-core", () => {
     }
 
     async loadBookConfig(): Promise<never> {
-      throw new Error("not implemented");
+      return await loadBookConfigMock() as never;
     }
 
     async loadChapterIndex(bookId: string): Promise<[]> {
@@ -162,6 +163,9 @@ describe("createStudioServer daemon lifecycle", () => {
     rollbackToChapterMock.mockReset();
     saveChapterIndexMock.mockReset();
     loadChapterIndexMock.mockReset();
+    loadBookConfigMock.mockReset();
+    await mkdir(join(root, "books", "demo-book", "chapters"), { recursive: true });
+    await writeFile(join(root, "books", "demo-book", "chapters", "0003_Demo.md"), "# Demo\n\nBody", "utf-8");
     runRadarMock.mockResolvedValue({
       marketSummary: "Fresh market summary",
       recommendations: [],
@@ -244,6 +248,17 @@ describe("createStudioServer daemon lifecycle", () => {
       };
     });
     loadChapterIndexMock.mockResolvedValue([]);
+    loadBookConfigMock.mockResolvedValue({
+      id: "demo-book",
+      title: "Demo Book",
+      platform: "qidian",
+      genre: "xuanhuan",
+      status: "active",
+      targetChapters: 100,
+      chapterWordCount: 3000,
+      createdAt: "2026-04-12T00:00:00.000Z",
+      updatedAt: "2026-04-12T00:00:00.000Z",
+    });
     saveChapterIndexMock.mockResolvedValue(undefined);
     rollbackToChapterMock.mockResolvedValue([]);
     pipelineConfigs.length = 0;
