@@ -1,4 +1,5 @@
 import type { AutomationMode, ExecutionStatus, InteractionIntentType } from "@actalk/inkos-core";
+import { formatModeLabel, getTuiCopy, resolveTuiLocale, type TuiLocale } from "./i18n.js";
 
 export function formatTuiResult(params: {
   readonly intent: InteractionIntentType;
@@ -6,42 +7,33 @@ export function formatTuiResult(params: {
   readonly bookId?: string;
   readonly mode?: AutomationMode;
   readonly responseText?: string;
+  readonly locale?: TuiLocale;
 }): string {
+  const copy = getTuiCopy(params.locale ?? resolveTuiLocale());
+
   if (params.responseText?.trim()) {
     return params.responseText.trim();
   }
 
   if (params.intent === "switch_mode" && params.mode) {
-    return `Mode switched to ${params.mode}.`;
+    return copy.results.modeSwitched(formatModeLabel(params.mode, copy));
   }
 
   if (params.intent === "list_books") {
-    return "Books listed.";
+    return copy.results.booksListed;
   }
 
   if (params.intent === "select_book" && params.bookId) {
-    return `Active book: ${params.bookId}`;
+    return copy.results.activeBook(params.bookId);
   }
 
   if (params.bookId) {
-    return `${intentLabel(params.intent)} — ${params.bookId}`;
+    return `${intentLabel(params.intent, copy)} — ${params.bookId}`;
   }
 
-  return intentLabel(params.intent);
+  return intentLabel(params.intent, copy);
 }
 
-function intentLabel(intent: InteractionIntentType): string {
-  const labels: Partial<Record<InteractionIntentType, string>> = {
-    write_next: "Chapter written",
-    revise_chapter: "Chapter revised",
-    rewrite_chapter: "Chapter rewritten",
-    update_focus: "Focus updated",
-    explain_status: "Status",
-    explain_failure: "Explanation",
-    pause_book: "Book paused",
-    rename_entity: "Entity renamed",
-    patch_chapter_text: "Text patched",
-    edit_truth: "Truth file updated",
-  };
-  return labels[intent] ?? `Completed ${intent}`;
+function intentLabel(intent: InteractionIntentType, copy: ReturnType<typeof getTuiCopy>): string {
+  return copy.results.intentLabels[intent] ?? copy.results.completed(intent);
 }

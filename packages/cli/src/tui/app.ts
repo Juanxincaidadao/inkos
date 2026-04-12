@@ -1,38 +1,51 @@
-/* ── InkOS TUI — persistent REPL with themed animations ── */
-
 import { basename } from "node:path";
-import readline from "node:readline/promises";
 import {
   appendInteractionMessage,
   processProjectInteractionInput,
-  routeNaturalLanguageIntent,
   type InteractionRuntimeTools,
 } from "@actalk/inkos-core";
-import {
-  loadProjectSession,
-  persistProjectSession,
-  resolveSessionActiveBook,
-} from "./session-store.js";
-import { createInteractionTools } from "./tools.js";
+import { render } from "ink";
+import React from "react";
+import { InkTuiApp } from "./dashboard.js";
+import { formatModeLabel, getTuiCopy, normalizeStageLabel, resolveTuiLocale, type TuiLocale } from "./i18n.js";
 import { formatTuiResult } from "./output.js";
-import { ensureProject, interactiveLlmSetup, detectModelInfo } from "./setup.js";
-import {
-  c, bold, dim, cyan, green, yellow, gray, red, brightCyan, brightWhite,
-  showCursor, reset, box,
-} from "./ansi.js";
-import {
-  ThemedSpinner,
-  animateStartup,
-  formatResultCard,
-  intentToTheme,
-  printStyledHelp,
-  printStyledStatus,
-  printInputSeparator,
-  inputPromptPrefix,
-  drawInputHint,
-} from "./effects.js";
+import { loadProjectSession, persistProjectSession } from "./session-store.js";
+import { detectModelInfo, detectProjectLanguage, ensureProject, interactiveLlmSetup } from "./setup.js";
+import { createInteractionTools } from "./tools.js";
+import { animateStartup } from "./effects.js";
 
-/* ── Version ── */
+export interface TuiFrameState {
+  readonly locale?: TuiLocale;
+  readonly projectName: string;
+  readonly activeBookTitle?: string;
+  readonly automationMode: string;
+  readonly status: string;
+  readonly messages?: ReadonlyArray<string>;
+  readonly events?: ReadonlyArray<string>;
+}
+
+export function renderTuiFrame(state: TuiFrameState): string {
+  const locale = state.locale ?? resolveTuiLocale();
+  const copy = getTuiCopy(locale);
+  const lines = [
+    `${copy.labels.project} ${state.projectName}`,
+    `${copy.labels.stage} ${normalizeStageLabel(state.status, copy)}`,
+    `${copy.labels.mode} ${formatModeLabel(state.automationMode, copy)}`,
+    `${copy.labels.book} ${state.activeBookTitle ?? copy.labels.none}`,
+    "",
+    ...(state.messages?.length
+      ? state.messages.slice(-6).map((message) => `- ${message}`)
+      : [`- (${copy.labels.none})`]),
+    "",
+    state.events?.length
+      ? state.events.slice(-1).map((event) => `${copy.labels.recent} ${event}`)[0]!
+      : `${copy.labels.recent} (${copy.labels.none})`,
+    "",
+    copy.composer.placeholder,
+    "> ",
+  ];
+  return lines.join("\n");
+}
 
 async function readVersion(): Promise<string> {
   try {
@@ -47,103 +60,13 @@ async function readVersion(): Promise<string> {
   }
 }
 
-/* ── Process input with themed spinner ── */
-
-async function processInput(
-  projectRoot: string,
-  input: string,
-  tools: InteractionRuntimeTools,
-): Promise<{ summary: string; intent: string } | undefined> {
-  // Detect intent for themed spinner
-  const session = await loadProjectSession(projectRoot);
-  const activeBookId = await resolveSessionActiveBook(projectRoot, session);
-  const routed = routeNaturalLanguageIntent(input, { activeBookId });
-  const themeName = intentToTheme(routed.intent);
-
-  const spinner = new ThemedSpinner(themeName);
-  const intentLabels: Record<string, string> = {
-    write_next: "writing chapter",
-    revise_chapter: "revising chapter",
-    rewrite_chapter: "rewriting chapter",
-    update_focus: "updating focus",
-    explain_status: "checking status",
-    explain_failure: "investigating",
-    pause_book: "pausing book",
-    list_books: "listing books",
-    select_book: "selecting book",
-    switch_mode: "switching mode",
-    rename_entity: "renaming entity",
-    patch_chapter_text: "patching text",
-    edit_truth: "editing truth file",
-  };
-  spinner.start(intentLabels[routed.intent] ?? "processing");
-
-  try {
-    const result = await processProjectInteractionInput({
-      projectRoot,
-      input,
-      tools,
-    });
-    const summary = formatTuiResult({
-      intent: result.request.intent,
-      status: result.session.currentExecution?.status ?? "completed",
-      bookId: result.session.activeBookId,
-      mode: result.request.mode,
-      responseText: result.responseText,
-    });
-    const nextSession = appendInteractionMessage(result.session, {
-      role: "assistant",
-      content: summary,
-      timestamp: Date.now(),
-    });
-    await persistProjectSession(projectRoot, nextSession);
-    spinner.succeed(c(summary, dim));
-    return { summary, intent: result.request.intent };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    spinner.fail(c(msg, red));
-    return undefined;
-  }
-}
-
-/* ── Legacy exports for tests ── */
-
-export interface TuiFrameState {
-  readonly projectName: string;
-  readonly activeBookTitle?: string;
-  readonly automationMode: string;
-  readonly status: string;
-  readonly messages?: ReadonlyArray<string>;
-  readonly events?: ReadonlyArray<string>;
-}
-
-export function renderTuiFrame(state: TuiFrameState): string {
-  const lines = [
-    `Project: ${state.projectName}`,
-    `Book: ${state.activeBookTitle ?? "none"}`,
-    `Mode: ${state.automationMode}`,
-    `Stage: ${state.status}`,
-    "",
-    "Messages:",
-    ...(state.messages?.length
-      ? state.messages.slice(-3).map((message) => `- ${message}`)
-      : ["- (empty)"]),
-    "",
-    "Events:",
-    ...(state.events?.length
-      ? state.events.slice(-3).map((event) => `- ${event}`)
-      : ["- (empty)"]),
-    "",
-    "> ",
-  ];
-  return lines.join("\n");
-}
-
 export async function processTuiInput(
   projectRoot: string,
   input: string,
   tools: InteractionRuntimeTools,
 ) {
+  const projectLanguage = await detectProjectLanguage(projectRoot);
+  const locale = resolveTuiLocale(process.env, projectLanguage);
   const result = await processProjectInteractionInput({
     projectRoot,
     input,
@@ -155,6 +78,7 @@ export async function processTuiInput(
     bookId: result.session.activeBookId,
     mode: result.request.mode,
     responseText: result.responseText,
+    locale,
   });
   const nextSession = appendInteractionMessage(result.session, {
     role: "assistant",
@@ -165,168 +89,77 @@ export async function processTuiInput(
   return { ...result, session: nextSession };
 }
 
-/* ── Main REPL ── */
-
 export async function launchTui(
   projectRoot: string,
   toolsOverride?: InteractionRuntimeTools,
 ): Promise<void> {
-  // 1. Auto-setup
   const { hasLlmConfig } = await ensureProject(projectRoot);
+  const projectLanguage = await detectProjectLanguage(projectRoot);
+  const locale = resolveTuiLocale(process.env, projectLanguage);
+  const copy = getTuiCopy(locale);
 
-  // 2. LLM config if missing
   if (!hasLlmConfig) {
     console.log();
-    console.log(c("  No LLM configuration found.", yellow));
-    console.log(c("  Let's set up your API provider first.", dim));
+    console.log(copy.notes.noLlmConfig);
+    console.log(copy.notes.setupProvider);
     await interactiveLlmSetup(projectRoot);
   }
 
-  // 3. Load session
-  const session = await loadProjectSession(projectRoot);
-  const activeBookId = await resolveSessionActiveBook(projectRoot, session);
-  const version = await readVersion();
-
-  // 4. Detect model + animated welcome
-  const modelInfo = await detectModelInfo(projectRoot);
-  await animateStartup(version, basename(projectRoot), activeBookId, modelInfo ?? undefined);
-
-  // 5. Bail if not interactive
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     return;
   }
 
-  // 6. Build tools
+  const session = await loadProjectSession(projectRoot);
+  const modelInfo = await detectModelInfo(projectRoot);
+  const modelLabel = modelInfo
+    ? `${modelInfo.model && modelInfo.model !== "unknown" ? modelInfo.model : copy.labels.unknown} (${modelInfo.provider})`
+    : copy.labels.notConfigured;
+  const version = await readVersion();
+  const chatStreamBridge: { onTextDelta?: (text: string) => void } = {};
+
   let tools: InteractionRuntimeTools;
   try {
-    tools = toolsOverride ?? (await createInteractionTools(projectRoot));
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.log(c(`  ${c("✗", red, bold)} Failed to initialize: ${msg}`, red));
-    console.log(c("  Check your .env or run: inkos config set-global", dim));
-    console.log();
+    tools = toolsOverride ?? (await createInteractionTools(projectRoot, {
+      onChatTextDelta: (text) => {
+        chatStreamBridge.onTextDelta?.(text);
+      },
+    }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(copy.notes.toolInitFailed(message));
+    console.error(copy.notes.toolInitHint);
     return;
   }
 
-  // 7. Suppress noisy Node warnings (e.g. SQLite experimental)
-  const origEmitWarning = process.emitWarning;
+  const originalEmitWarning = process.emitWarning;
   process.emitWarning = (() => {}) as typeof process.emitWarning;
-  const origStderrWrite = process.stderr.write.bind(process.stderr);
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
   process.stderr.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
-    const s = typeof chunk === "string" ? chunk : chunk.toString();
-    if (s.includes("ExperimentalWarning") || s.includes("--trace-warnings")) {
+    const text = typeof chunk === "string" ? chunk : chunk.toString();
+    if (text.includes("ExperimentalWarning") || text.includes("--trace-warnings")) {
       return true;
     }
-    return (origStderrWrite as Function)(chunk, ...args);
+    return (originalStderrWrite as Function)(chunk, ...args);
   };
 
-  // 8. Slash command completer
-  const SLASH_COMMANDS = [
-    "/write", "/rewrite", "/books", "/open", "/status",
-    "/mode", "/focus", "/config", "/clear", "/help", "/quit",
-  ];
-  const completer = (line: string): [string[], string] => {
-    if (line.startsWith("/")) {
-      const hits = SLASH_COMMANDS.filter((cmd) => cmd.startsWith(line));
-      return [hits.length > 0 ? hits : SLASH_COMMANDS, line];
-    }
-    return [[], line];
-  };
+  try {
+    await animateStartup(version, basename(projectRoot), session.activeBookId, modelInfo);
 
-  // 9. REPL loop
-  const prompt = inputPromptPrefix();
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt,
-    completer,
-  });
-
-  const cleanup = () => {
-    process.emitWarning = origEmitWarning;
-    process.stderr.write = origStderrWrite;
-    process.stdout.write(showCursor);
-    rl.close();
-  };
-
-  const promptInput = () => {
-    drawInputHint();
-    rl.prompt();
-  };
-
-  process.on("SIGINT", () => {
-    console.log();
-    console.log(c("  ◇ goodbye", dim));
-    console.log();
-    cleanup();
-    process.exit(0);
-  });
-
-  promptInput();
-
-  for await (const line of rl) {
-    const input = line.trim();
-
-    if (!input) {
-      promptInput();
-      continue;
-    }
-
-    console.log();
-
-    // Built-in TUI commands
-    if (/^\/quit$/i.test(input) || /^\/exit$/i.test(input) || /^(quit|exit|bye)$/i.test(input)) {
-      console.log(c("  ◇ goodbye", dim));
-      console.log();
-      break;
-    }
-
-    if (/^\/help$/i.test(input) || /^(help|帮助)$/i.test(input)) {
-      printStyledHelp();
-      promptInput();
-      continue;
-    }
-
-    if (/^\/status$/i.test(input) || /^(status|状态)$/i.test(input)) {
-      try {
-        const s = await loadProjectSession(projectRoot);
-        const bId = await resolveSessionActiveBook(projectRoot, s);
-        printStyledStatus({
-          mode: s.automationMode,
-          bookId: bId,
-          status: s.currentExecution?.status ?? "idle",
-          events: s.events,
-        });
-      } catch {
-        console.log(c("  Could not load session.", dim));
-      }
-      promptInput();
-      continue;
-    }
-
-    if (/^\/config$/i.test(input)) {
-      await interactiveLlmSetup(projectRoot);
-      const newModel = await detectModelInfo(projectRoot);
-      if (newModel) {
-        console.log(`  ${c("◇", cyan)} ${c("Model", gray)}    ${c(newModel.model, brightWhite)} ${c(`(${newModel.provider})`, dim)}`);
-      }
-      console.log();
-      promptInput();
-      continue;
-    }
-
-    if (/^\/clear$/i.test(input)) {
-      console.clear();
-      promptInput();
-      continue;
-    }
-
-    // Delegate to interaction layer with themed animation
-    await processInput(projectRoot, input, tools);
-    console.log();
-
-    promptInput();
+    const app = render(
+      React.createElement(InkTuiApp, {
+        locale,
+        projectRoot,
+        projectName: basename(projectRoot),
+        modelLabel,
+        initialSession: session,
+        tools,
+        chatStreamBridge,
+      }),
+      { exitOnCtrlC: true },
+    );
+    await app.waitUntilExit();
+  } finally {
+    process.emitWarning = originalEmitWarning;
+    process.stderr.write = originalStderrWrite;
   }
-
-  cleanup();
 }

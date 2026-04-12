@@ -315,6 +315,13 @@ async function withPipelineInteractionTelemetry<T extends { chapterNumber?: numb
 export function createInteractionToolsFromDeps(
   pipeline: PipelineLike,
   state: StateLike,
+  hooks?: {
+    readonly onChatTextDelta?: (text: string) => void;
+    readonly getChatRequestOptions?: () => {
+      readonly temperature?: number;
+      readonly maxTokens?: number;
+    };
+  },
 ): InteractionRuntimeTools {
   const instrumentedPipeline = pipeline as InstrumentablePipelineLike;
 
@@ -355,6 +362,7 @@ export function createInteractionToolsFromDeps(
     },
     chat: async (input, options) => {
       const bookLabel = options.bookId ?? "none";
+      const chatRequestOptions = hooks?.getChatRequestOptions?.() ?? {};
       const response = instrumentedPipeline.config?.client && instrumentedPipeline.config?.model
         ? await chatCompletion(
           instrumentedPipeline.config.client,
@@ -374,7 +382,11 @@ export function createInteractionToolsFromDeps(
               content: `activeBook=${bookLabel}\nautomationMode=${options.automationMode}\nmessage=${input}`,
             },
           ],
-          { temperature: 0.4, maxTokens: 240 },
+          {
+            temperature: chatRequestOptions.temperature ?? 0.4,
+            maxTokens: chatRequestOptions.maxTokens ?? 240,
+            onTextDelta: hooks?.onChatTextDelta,
+          },
         )
         : undefined;
 

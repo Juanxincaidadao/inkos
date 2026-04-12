@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { appendInteractionEvent, appendInteractionMessage } from "./session.js";
 import { routeNaturalLanguageIntent } from "./nl-router.js";
 import type { InteractionRequest } from "./intents.js";
@@ -15,9 +17,11 @@ async function processProjectInteractionRequestInternal(params: {
   readonly tools: InteractionRuntimeTools;
   readonly activeBookId?: string;
 }) {
+  const requestLanguage = await detectProjectInteractionLanguage(params.projectRoot);
+  const localizedRequest = attachRequestLanguage(params.request, requestLanguage);
   const session = await loadProjectSession(params.projectRoot);
   const restoredBookId = await resolveSessionActiveBook(params.projectRoot, session);
-  const resolvedBookId = params.activeBookId ?? params.request.bookId ?? restoredBookId;
+  const resolvedBookId = params.activeBookId ?? localizedRequest.bookId ?? restoredBookId;
   const sessionWithBook = resolvedBookId && session.activeBookId !== resolvedBookId
     ? { ...session, activeBookId: resolvedBookId }
     : session;
@@ -25,13 +29,13 @@ async function processProjectInteractionRequestInternal(params: {
   try {
     const result = await runInteractionRequest({
       session: sessionWithBook,
-      request: params.request,
+      request: localizedRequest,
       tools: params.tools,
     });
     await persistProjectSession(params.projectRoot, result.session);
     return {
       ...result,
-      request: params.request,
+      request: localizedRequest,
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -41,7 +45,7 @@ async function processProjectInteractionRequestInternal(params: {
         status: "failed",
         bookId: sessionWithBook.activeBookId,
         chapterNumber: sessionWithBook.activeChapterNumber,
-        stageLabel: `failed ${params.request.intent}`,
+        stageLabel: localizedRequest.language === "en" ? `failed ${localizedRequest.intent}` : `执行失败：${localizedRequest.intent}`,
       },
     }, {
       kind: "task.failed",
@@ -62,6 +66,7 @@ export async function processProjectInteractionInput(params: {
   readonly tools: InteractionRuntimeTools;
   readonly activeBookId?: string;
 }) {
+  const requestLanguage = await detectProjectInteractionLanguage(params.projectRoot);
   const session = await loadProjectSession(params.projectRoot);
   const restoredBookId = await resolveSessionActiveBook(params.projectRoot, session);
   const resolvedBookId = params.activeBookId ?? restoredBookId;
@@ -73,9 +78,9 @@ export async function processProjectInteractionInput(params: {
     content: params.input,
     timestamp: Date.now(),
   });
-  const request = routeNaturalLanguageIntent(params.input, {
+  const request = attachRequestLanguage(routeNaturalLanguageIntent(params.input, {
     activeBookId: userSession.activeBookId,
-  });
+  }), requestLanguage);
   try {
     const result = await runInteractionRequest({
       session: userSession,
@@ -95,7 +100,7 @@ export async function processProjectInteractionInput(params: {
         status: "failed",
         bookId: userSession.activeBookId,
         chapterNumber: userSession.activeChapterNumber,
-        stageLabel: `failed ${request.intent}`,
+        stageLabel: request.language === "en" ? `failed ${request.intent}` : `执行失败：${request.intent}`,
       },
     }, {
       kind: "task.failed",
@@ -117,4 +122,28 @@ export async function processProjectInteractionRequest(params: {
   readonly activeBookId?: string;
 }) {
   return processProjectInteractionRequestInternal(params);
+}
+
+function attachRequestLanguage(
+  request: InteractionRequest,
+  language: "zh" | "en" | undefined,
+): InteractionRequest {
+  if (request.language || !language) {
+    return request;
+  }
+
+  return {
+    ...request,
+    language,
+  };
+}
+
+async function detectProjectInteractionLanguage(projectRoot: string): Promise<"zh" | "en" | undefined> {
+  try {
+    const raw = await readFile(join(projectRoot, "inkos.json"), "utf-8");
+    const parsed = JSON.parse(raw) as { language?: string };
+    return parsed.language === "en" ? "en" : parsed.language === "zh" ? "zh" : undefined;
+  } catch {
+    return undefined;
+  }
 }

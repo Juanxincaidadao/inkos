@@ -15,6 +15,7 @@ describe("tui output", () => {
       intent: "switch_mode",
       status: "completed",
       mode: "auto",
+      locale: "en",
     })).toContain("auto");
   });
 
@@ -24,5 +25,14 @@ describe("tui output", () => {
       status: "completed",
       responseText: "Current status: harbor is at repairing chapter 3.",
     })).toBe("Current status: harbor is at repairing chapter 3.");
+  });
+
+  it("renders Chinese summaries when locale is zh-CN", () => {
+    expect(formatTuiResult({
+      intent: "select_book",
+      status: "completed",
+      bookId: "harbor",
+      locale: "zh-CN",
+    })).toBe("当前作品：harbor");
   });
 });

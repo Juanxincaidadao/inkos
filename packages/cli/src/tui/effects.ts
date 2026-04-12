@@ -8,6 +8,7 @@ import {
   clearLine, hideCursor, showCursor, reset,
   badge, sleep, stripAnsi, box,
 } from "./ansi.js";
+import { formatModeLabel, getTuiCopy, normalizeStageLabel, resolveTuiLocale, type TuiLocale } from "./i18n.js";
 
 /* ── Operation themes ── */
 
@@ -18,6 +19,11 @@ export interface OperationTheme {
   readonly bg: string;
   readonly label: string;
   readonly frames: ReadonlyArray<string>;
+}
+
+export interface StyledHelpSection {
+  readonly title: string;
+  readonly commands: ReadonlyArray<readonly [string, string]>;
 }
 
 const WAVE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -98,7 +104,7 @@ export class ThemedSpinner {
   }
 
   start(label?: string): void {
-    const displayLabel = label ?? this.theme.label;
+    const displayLabel = label ?? localizeThemeLabel(this.theme.label, resolveTuiLocale());
     this.frame = 0;
     this.elapsed = 0;
     process.stdout.write(hideCursor);
@@ -170,8 +176,8 @@ export function inputPromptPrefix(): string {
 }
 
 export function drawInputHint(): void {
-  console.log();
-  console.log();
+  // Keep the prompt anchored to the next line; extra blank lines confuse
+  // terminal UIs that render readline prompts inside a framed input block.
 }
 
 export function printInputSeparator(): void {
@@ -214,31 +220,6 @@ export async function animateStartup(version: string, projectName: string, bookT
     }
     console.log(c(`  v${version}`, dim));
   }
-
-  // Project info
-  console.log();
-  const bookDisplay = bookTitle
-    ? c(bookTitle, brightWhite)
-    : c("no book yet", dim);
-  const modelDisplay = modelInfo
-    ? `${c(modelInfo.model, brightWhite)} ${c(`(${modelInfo.provider})`, dim)}`
-    : c("not configured — type /config to set up", yellow);
-
-  if (isTTY) {
-    await typewrite(`  ${c("◇", cyan)} ${c("Project", gray)}  ${c(projectName, brightWhite)}`, 8);
-    await sleep(60);
-    await typewrite(`  ${c("◇", cyan)} ${c("Book", gray)}     ${bookDisplay}`, 8);
-    await sleep(60);
-    await typewrite(`  ${c("◇", cyan)} ${c("Model", gray)}    ${modelDisplay}`, 8);
-    await sleep(60);
-  } else {
-    console.log(`  ${c("◇", cyan)} ${c("Project", gray)}  ${c(projectName, brightWhite)}`);
-    console.log(`  ${c("◇", cyan)} ${c("Book", gray)}     ${bookDisplay}`);
-    console.log(`  ${c("◇", cyan)} ${c("Model", gray)}    ${modelDisplay}`);
-  }
-
-  console.log();
-  console.log(c("  /help for commands · Tab to autocomplete", dim));
   console.log();
 }
 
@@ -280,23 +261,55 @@ export function formatResultCard(content: string, intent?: string): string {
   return lines.join("\n");
 }
 
-function intentToBadge(intent: string): string {
-  const badges: Record<string, [string, string]> = {
-    write_next: [" WRITE ", bgMagenta],
-    revise_chapter: [" REVISE ", bgBlue],
-    rewrite_chapter: [" REWRITE ", bgBlue],
-    update_focus: [" FOCUS ", bgCyan],
-    explain_status: [" STATUS ", bgGray],
-    explain_failure: [" DEBUG ", bgRed],
-    pause_book: [" PAUSE ", bgYellow],
-    list_books: [" BOOKS ", bgGray],
-    select_book: [" SELECT ", bgGreen],
-    switch_mode: [" MODE ", bgCyan],
-    rename_entity: [" RENAME ", bgYellow],
-    patch_chapter_text: [" PATCH ", bgBlue],
-    edit_truth: [" TRUTH ", bgGreen],
+export function intentToBadge(intent: string, locale: TuiLocale = resolveTuiLocale()): string {
+  const labels = locale === "en"
+    ? {
+        write_next: " WRITE ",
+        revise_chapter: " REVISE ",
+        rewrite_chapter: " REWRITE ",
+        update_focus: " FOCUS ",
+        explain_status: " STATUS ",
+        explain_failure: " DEBUG ",
+        pause_book: " PAUSE ",
+        list_books: " BOOKS ",
+        select_book: " SELECT ",
+        switch_mode: " MODE ",
+        rename_entity: " RENAME ",
+        patch_chapter_text: " PATCH ",
+        edit_truth: " TRUTH ",
+      }
+    : {
+        write_next: " 写作 ",
+        revise_chapter: " 修订 ",
+        rewrite_chapter: " 重写 ",
+        update_focus: " 焦点 ",
+        explain_status: " 状态 ",
+        explain_failure: " 调试 ",
+        pause_book: " 暂停 ",
+        list_books: " 作品 ",
+        select_book: " 选择 ",
+        switch_mode: " 模式 ",
+        rename_entity: " 改名 ",
+        patch_chapter_text: " 修补 ",
+        edit_truth: " 真相 ",
+      };
+  const backgrounds: Record<string, string> = {
+    write_next: bgMagenta,
+    revise_chapter: bgBlue,
+    rewrite_chapter: bgBlue,
+    update_focus: bgCyan,
+    explain_status: bgGray,
+    explain_failure: bgRed,
+    pause_book: bgYellow,
+    list_books: bgGray,
+    select_book: bgGreen,
+    switch_mode: bgCyan,
+    rename_entity: bgYellow,
+    patch_chapter_text: bgBlue,
+    edit_truth: bgGreen,
   };
-  const [label, bg] = badges[intent] ?? [` ${intent.toUpperCase()} `, bgGray];
+  const label = labels[intent as keyof typeof labels] ?? ` ${intent} `;
+  const bg = backgrounds[intent] ?? bgGray;
   return badge(label!, bg!);
 }
 
@@ -324,38 +337,9 @@ export function intentToTheme(intent: string): string {
 /* ── Help display ── */
 
 export function printStyledHelp(): void {
-  const sections = [
-    {
-      title: "Writing",
-      commands: [
-        ["/write", "Write the next chapter (full pipeline)"],
-        ["/rewrite <n>", "Rewrite chapter N from scratch"],
-      ],
-    },
-    {
-      title: "Navigation",
-      commands: [
-        ["/books", "List all books"],
-        ["/open <book>", "Select active book"],
-        ["/status", "Show current status"],
-      ],
-    },
-    {
-      title: "Control",
-      commands: [
-        ["/mode <auto|semi|manual>", "Switch automation mode"],
-        ["/focus <text>", "Update current focus"],
-      ],
-    },
-    {
-      title: "Session",
-      commands: [
-        ["/clear", "Clear screen"],
-        ["/help", "Show this help"],
-        ["/quit", "Exit InkOS TUI"],
-      ],
-    },
-  ];
+  const locale = resolveTuiLocale();
+  const sections = buildStyledHelpSections(locale);
+  const footer = buildHelpFooter(locale);
 
   console.log();
   for (const section of sections) {
@@ -368,8 +352,10 @@ export function printStyledHelp(): void {
     }
     console.log();
   }
-  console.log(c("  Natural language also works:", dim));
-  console.log(c('  "继续写" "写下一章" "暂停" "把林烬改成张三"', dim, italic));
+  console.log(c(`  ${footer.title}`, dim));
+  for (const example of footer.examples) {
+    console.log(c(`  ${example}`, dim, italic));
+  }
   console.log();
 }
 
@@ -381,6 +367,24 @@ export function printStyledStatus(params: {
   readonly status: string;
   readonly events: ReadonlyArray<{ readonly kind: string; readonly detail?: string; readonly status: string }>;
 }): void {
+  const locale = resolveTuiLocale();
+  console.log();
+  for (const line of formatStyledStatusLines(locale, params)) {
+    console.log(line);
+  }
+  console.log();
+}
+
+export function formatStyledStatusLines(
+  locale: TuiLocale,
+  params: {
+    readonly mode: string;
+    readonly bookId?: string;
+    readonly status: string;
+    readonly events: ReadonlyArray<{ readonly kind: string; readonly detail?: string; readonly status: string }>;
+  },
+): string[] {
+  const copy = getTuiCopy(locale);
   const modeColors: Record<string, string> = {
     auto: green,
     semi: yellow,
@@ -397,19 +401,23 @@ export function printStyledStatus(params: {
     waiting_human: brightYellow,
   };
   const statusColor = statusColors[params.status] ?? gray;
-
-  console.log();
-  console.log(`  ${c("◇", cyan)} ${c("Mode", gray)}     ${c(params.mode, modeColor, bold)}`);
-  console.log(`  ${c("◇", cyan)} ${c("Book", gray)}     ${params.bookId ? c(params.bookId, brightWhite) : c("none", dim)}`);
-  console.log(`  ${c("◇", cyan)} ${c("Status", gray)}   ${c(params.status, statusColor)}`);
+  const modeLabel = locale === "en" ? "Mode" : "模式";
+  const bookLabel = locale === "en" ? "Book" : "作品";
+  const statusLabel = locale === "en" ? "Status" : "状态";
+  const recentLabel = locale === "en" ? "Recent" : "最近";
+  const lines = [
+    `  ${c("◇", cyan)} ${c(modeLabel, gray)}     ${c(formatModeLabel(params.mode, copy), modeColor, bold)}`,
+    `  ${c("◇", cyan)} ${c(bookLabel, gray)}     ${params.bookId ? c(params.bookId, brightWhite) : c(copy.labels.none, dim)}`,
+    `  ${c("◇", cyan)} ${c(statusLabel, gray)}   ${c(normalizeStageLabel(params.status, copy), statusColor)}`,
+  ];
   if (params.events.length > 0) {
-    console.log(`  ${c("◇", cyan)} ${c("Recent", gray)}`);
+    lines.push(`  ${c("◇", cyan)} ${c(recentLabel, gray)}`);
     for (const ev of params.events.slice(-3)) {
       const icon = ev.status === "completed" ? c("✓", green) : c("·", gray);
-      console.log(`        ${icon} ${c(`${ev.kind}`, dim)} ${c(ev.detail ?? "", gray)}`);
+      lines.push(`        ${icon} ${c(`${ev.kind}`, dim)} ${c(ev.detail ?? "", gray)}`);
     }
   }
-  console.log();
+  return lines;
 }
 
 /* ── Utilities ── */
@@ -419,4 +427,105 @@ function formatElapsed(ms: number): string {
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
   return `${m}m${s % 60}s`;
+}
+
+export function buildStyledHelpSections(locale: TuiLocale = resolveTuiLocale()): StyledHelpSection[] {
+  if (locale === "en") {
+    return [
+      {
+        title: "Writing",
+        commands: [
+          ["/write", "Write the next chapter (full pipeline)"],
+          ["/rewrite <n>", "Rewrite chapter N from scratch"],
+        ],
+      },
+      {
+        title: "Navigation",
+        commands: [
+          ["/books", "List all books"],
+          ["/open <book>", "Select active book"],
+          ["/status", "Show current status"],
+        ],
+      },
+      {
+        title: "Control",
+        commands: [
+          ["/mode <auto|semi|manual>", "Switch automation mode"],
+          ["/focus <text>", "Update current focus"],
+        ],
+      },
+      {
+        title: "Session",
+        commands: [
+          ["/clear", "Clear screen"],
+          ["/help", "Show this help"],
+          ["/quit", "Exit InkOS TUI"],
+        ],
+      },
+    ];
+  }
+
+  return [
+    {
+      title: "写作",
+      commands: [
+        ["/write", "完整跑一轮下一章写作"],
+        ["/rewrite <n>", "从头重写第 N 章"],
+      ],
+    },
+    {
+      title: "导航",
+      commands: [
+        ["/books", "列出全部作品"],
+        ["/open <book>", "切换当前作品"],
+        ["/status", "查看当前状态"],
+      ],
+    },
+    {
+      title: "控制",
+      commands: [
+        ["/mode <auto|semi|manual>", "切换自动化模式"],
+        ["/focus <text>", "更新当前焦点"],
+      ],
+    },
+    {
+      title: "会话",
+      commands: [
+        ["/clear", "清空当前屏幕"],
+        ["/help", "显示帮助"],
+        ["/quit", "退出 InkOS TUI"],
+      ],
+    },
+  ];
+}
+
+function buildHelpFooter(locale: TuiLocale): { readonly title: string; readonly examples: readonly string[] } {
+  if (locale === "en") {
+    return {
+      title: "Natural language also works:",
+      examples: ['"continue writing" "write next chapter" "pause" "rename Lin Jin to Zhang San"'],
+    };
+  }
+
+  return {
+    title: "自然语言同样可用：",
+    examples: ['"继续写" "写下一章" "暂停" "把林烬改成张三"'],
+  };
+}
+
+function localizeThemeLabel(label: string, locale: TuiLocale): string {
+  if (locale === "en") {
+    return label;
+  }
+
+  const labels: Record<string, string> = {
+    thinking: "思考中",
+    writing: "写作中",
+    auditing: "审计中",
+    revising: "修订中",
+    planning: "规划中",
+    composing: "生成中",
+    loading: "加载中",
+  };
+  return labels[label] ?? label;
 }

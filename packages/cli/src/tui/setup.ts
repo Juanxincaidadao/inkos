@@ -8,6 +8,7 @@ import {
   cyan, green, yellow, gray, red,
   brightCyan, brightGreen, brightWhite,
 } from "./ansi.js";
+import { resolveTuiLocale, type TuiLocale } from "./i18n.js";
 import { GLOBAL_ENV_PATH } from "../utils.js";
 
 const PROVIDERS = ["openai", "anthropic", "custom"] as const;
@@ -15,6 +16,114 @@ const PROVIDERS = ["openai", "anthropic", "custom"] as const;
 interface SetupResult {
   readonly projectRoot: string;
   readonly hasLlmConfig: boolean;
+}
+
+export interface InteractiveSetupCopy {
+  readonly title: string;
+  readonly subtitle: string;
+  readonly steps: {
+    readonly provider: string;
+    readonly baseUrl: string;
+    readonly apiKey: string;
+    readonly model: string;
+    readonly scope: string;
+  };
+  readonly hints: {
+    readonly provider: string;
+    readonly baseUrl: string;
+    readonly model: string;
+    readonly scope: string;
+  };
+  readonly defaults: {
+    readonly provider: string;
+    readonly baseUrl: string;
+    readonly scope: string;
+  };
+  readonly scopeChoices: {
+    readonly global: string;
+    readonly project: string;
+  };
+  readonly savedTo: string;
+}
+
+export function buildInteractiveSetupCopy(locale: TuiLocale): InteractiveSetupCopy {
+  if (locale === "en") {
+    return {
+      title: "LLM Setup",
+      subtitle: "Configure your model provider to start writing.",
+      steps: {
+        provider: "Provider",
+        baseUrl: "Base URL",
+        apiKey: "API Key",
+        model: "Model",
+        scope: "Save scope",
+      },
+      hints: {
+        provider: "openai / anthropic / custom (OpenAI-compatible proxy)",
+        baseUrl: "Your API endpoint",
+        model: "e.g. gpt-4o, claude-sonnet-4-20250514, deepseek-chat",
+        scope: "global = all projects, project = this directory only",
+      },
+      defaults: {
+        provider: "openai",
+        baseUrl: "(default)",
+        scope: "[global]",
+      },
+      scopeChoices: {
+        global: "all projects",
+        project: "this directory",
+      },
+      savedTo: "Saved to",
+    };
+  }
+
+  return {
+    title: "模型配置",
+    subtitle: "配置模型服务后即可开始使用。",
+    steps: {
+      provider: "服务提供方",
+      baseUrl: "接口地址",
+      apiKey: "API 密钥",
+      model: "模型",
+      scope: "保存范围",
+    },
+    hints: {
+      provider: "openai / anthropic / custom（兼容 OpenAI 的代理）",
+      baseUrl: "你的 API 入口地址",
+      model: "例如 gpt-5.4、claude-sonnet-4-20250514、deepseek-chat",
+      scope: "global = 所有项目，project = 仅当前目录",
+    },
+    defaults: {
+      provider: "openai",
+      baseUrl: "（默认）",
+      scope: "[global]",
+    },
+    scopeChoices: {
+      global: "所有项目",
+      project: "当前目录",
+    },
+    savedTo: "已保存到",
+  };
+}
+
+export function buildAutoInitMessages(projectName: string, locale: TuiLocale): {
+  readonly initializing: string;
+  readonly initialized: string;
+  readonly envTemplateHeader: string;
+} {
+  if (locale === "en") {
+    return {
+      initializing: `Initializing project in ${projectName}/ ...`,
+      initialized: "Project initialized",
+      envTemplateHeader: "# LLM Configuration — run inkos tui to configure interactively",
+    };
+  }
+
+  return {
+    initializing: `正在初始化项目：${projectName}/ ...`,
+    initialized: "项目已初始化",
+    envTemplateHeader: "# LLM 配置 —— 运行 inkos tui 进行交互式配置",
+  };
 }
 
 export async function ensureProject(cwd: string): Promise<SetupResult> {
@@ -32,6 +141,9 @@ export async function ensureProject(cwd: string): Promise<SetupResult> {
 export async function interactiveLlmSetup(
   projectRoot: string,
 ): Promise<void> {
+  const projectLanguage = await detectProjectLanguage(projectRoot);
+  const locale = resolveTuiLocale(process.env, projectLanguage);
+  const copy = buildInteractiveSetupCopy(locale);
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -39,29 +151,29 @@ export async function interactiveLlmSetup(
 
   try {
     console.log();
-    console.log(`  ${c("◈", brightCyan)} ${c("LLM Setup", bold, brightWhite)}`);
-    console.log(c("  Configure your model provider to start writing.", dim));
+    console.log(`  ${c("◈", brightCyan)} ${c(copy.title, bold, brightWhite)}`);
+    console.log(c(`  ${copy.subtitle}`, dim));
     console.log();
 
     // Provider
-    console.log(`  ${c("1", cyan)}  ${c("Provider", gray)}`);
-    console.log(c("     openai / anthropic / custom (OpenAI-compatible proxy)", dim));
+    console.log(`  ${c("1", cyan)}  ${c(copy.steps.provider, gray)}`);
+    console.log(c(`     ${copy.hints.provider}`, dim));
     const providerInput = await rl.question(`     ${c("❯", cyan)} `);
     const provider = PROVIDERS.includes(providerInput.trim() as typeof PROVIDERS[number])
       ? providerInput.trim()
-      : "openai";
+      : copy.defaults.provider;
     console.log(`     ${c("✓", brightGreen)} ${provider}`);
     console.log();
 
     // Base URL
-    console.log(`  ${c("2", cyan)}  ${c("Base URL", gray)}`);
-    console.log(c("     Your API endpoint", dim));
+    console.log(`  ${c("2", cyan)}  ${c(copy.steps.baseUrl, gray)}`);
+    console.log(c(`     ${copy.hints.baseUrl}`, dim));
     const baseUrl = await rl.question(`     ${c("❯", cyan)} `);
-    console.log(`     ${c("✓", brightGreen)} ${baseUrl.trim() || "(default)"}`);
+    console.log(`     ${c("✓", brightGreen)} ${baseUrl.trim() || copy.defaults.baseUrl}`);
     console.log();
 
     // API Key
-    console.log(`  ${c("3", cyan)}  ${c("API Key", gray)}`);
+    console.log(`  ${c("3", cyan)}  ${c(copy.steps.apiKey, gray)}`);
     const apiKey = await rl.question(`     ${c("❯", cyan)} `);
     const maskedKey = apiKey.trim().length > 8
       ? apiKey.trim().slice(0, 4) + "···" + apiKey.trim().slice(-4)
@@ -70,16 +182,16 @@ export async function interactiveLlmSetup(
     console.log();
 
     // Model
-    console.log(`  ${c("4", cyan)}  ${c("Model", gray)}`);
-    console.log(c("     e.g. gpt-4o, claude-sonnet-4-20250514, deepseek-chat", dim));
+    console.log(`  ${c("4", cyan)}  ${c(copy.steps.model, gray)}`);
+    console.log(c(`     ${copy.hints.model}`, dim));
     const model = await rl.question(`     ${c("❯", cyan)} `);
     console.log(`     ${c("✓", brightGreen)} ${model.trim()}`);
     console.log();
 
     // Scope
-    console.log(`  ${c("5", cyan)}  ${c("Save scope", gray)}`);
-    console.log(c("     global = all projects, project = this directory only", dim));
-    const scope = await rl.question(`     ${c("❯", cyan)} ${c("[global]", dim)} `);
+    console.log(`  ${c("5", cyan)}  ${c(copy.steps.scope, gray)}`);
+    console.log(c(`     ${copy.hints.scope}`, dim));
+    const scope = await rl.question(`     ${c("❯", cyan)} ${c(copy.defaults.scope, dim)} `);
     const useGlobal = scope.trim().toLowerCase() !== "project";
 
     const envContent = [
@@ -94,11 +206,11 @@ export async function interactiveLlmSetup(
       await mkdir(globalDir, { recursive: true });
       await writeFile(GLOBAL_ENV_PATH, envContent + "\n", "utf-8");
       console.log();
-      console.log(`  ${c("✓", brightGreen, bold)} ${c("Saved to", dim)} ${c(GLOBAL_ENV_PATH, gray)}`);
+      console.log(`  ${c("✓", brightGreen, bold)} ${c(copy.savedTo, dim)} ${c(GLOBAL_ENV_PATH, gray)}`);
     } else {
       await writeFile(join(projectRoot, ".env"), envContent + "\n", "utf-8");
       console.log();
-      console.log(`  ${c("✓", brightGreen, bold)} ${c("Saved to", dim)} ${c(".env", gray)}`);
+      console.log(`  ${c("✓", brightGreen, bold)} ${c(copy.savedTo, dim)} ${c(".env", gray)}`);
     }
     console.log();
   } finally {
@@ -108,8 +220,10 @@ export async function interactiveLlmSetup(
 
 async function autoInit(cwd: string): Promise<void> {
   const projectName = basename(cwd);
+  const locale = resolveTuiLocale();
+  const messages = buildAutoInitMessages(projectName, locale);
   console.log();
-  console.log(`  ${c("◌", cyan)} ${c(`Initializing project in ${projectName}/ ...`, dim)}`);
+  console.log(`  ${c("◌", cyan)} ${c(messages.initializing, dim)}`);
 
   await mkdir(join(cwd, "books"), { recursive: true });
   await mkdir(join(cwd, "radar"), { recursive: true });
@@ -144,7 +258,7 @@ async function autoInit(cwd: string): Promise<void> {
     await writeFile(
       join(cwd, ".env"),
       [
-        "# LLM Configuration — run inkos tui to configure interactively",
+        messages.envTemplateHeader,
         "INKOS_LLM_PROVIDER=openai",
         "INKOS_LLM_BASE_URL=",
         "INKOS_LLM_API_KEY=",
@@ -160,7 +274,7 @@ async function autoInit(cwd: string): Promise<void> {
     "utf-8",
   );
 
-  console.log(`  ${c("✓", brightGreen, bold)} ${c("Project initialized", dim)}`);
+  console.log(`  ${c("✓", brightGreen, bold)} ${c(messages.initialized, dim)}`);
 }
 
 async function hasLlmConfig(projectRoot: string): Promise<boolean> {
@@ -196,6 +310,16 @@ export async function detectModelInfo(projectRoot: string): Promise<ModelInfo | 
     if (info) return info;
   }
   return undefined;
+}
+
+export async function detectProjectLanguage(projectRoot: string): Promise<string | undefined> {
+  try {
+    const raw = await readFile(join(projectRoot, "inkos.json"), "utf-8");
+    const parsed = JSON.parse(raw) as { language?: string };
+    return parsed.language;
+  } catch {
+    return undefined;
+  }
 }
 
 async function parseEnvModel(envPath: string): Promise<ModelInfo | undefined> {

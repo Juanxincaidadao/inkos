@@ -301,6 +301,7 @@ export async function chatCompletion(
     readonly maxTokens?: number;
     readonly webSearch?: boolean;
     readonly onStreamProgress?: OnStreamProgress;
+    readonly onTextDelta?: (text: string) => void;
   },
 ): Promise<LLMResponse> {
   const perCallMax = options?.maxTokens ?? client.defaults.maxTokens;
@@ -314,22 +315,23 @@ export async function chatCompletion(
     extra: client.defaults.extra,
   };
   const onStreamProgress = options?.onStreamProgress;
+  const onTextDelta = options?.onTextDelta;
   const errorCtx = { baseUrl: client._openai?.baseURL ?? "(anthropic)", model };
 
   try {
     if (client.provider === "anthropic") {
       return client.stream
-        ? await chatCompletionAnthropic(client._anthropic!, model, messages, resolved, client.defaults.thinkingBudget, onStreamProgress)
-        : await chatCompletionAnthropicSync(client._anthropic!, model, messages, resolved, client.defaults.thinkingBudget);
+        ? await chatCompletionAnthropic(client._anthropic!, model, messages, resolved, client.defaults.thinkingBudget, onStreamProgress, onTextDelta)
+        : await chatCompletionAnthropicSync(client._anthropic!, model, messages, resolved, client.defaults.thinkingBudget, onTextDelta);
     }
     if (client.apiFormat === "responses") {
       return client.stream
-        ? await chatCompletionOpenAIResponses(client._openai!, model, messages, resolved, options?.webSearch, onStreamProgress)
-        : await chatCompletionOpenAIResponsesSync(client._openai!, model, messages, resolved, options?.webSearch);
+        ? await chatCompletionOpenAIResponses(client._openai!, model, messages, resolved, options?.webSearch, onStreamProgress, onTextDelta)
+        : await chatCompletionOpenAIResponsesSync(client._openai!, model, messages, resolved, options?.webSearch, onTextDelta);
     }
     return client.stream
-      ? await chatCompletionOpenAIChat(client._openai!, model, messages, resolved, options?.webSearch, onStreamProgress)
-      : await chatCompletionOpenAIChatSync(client._openai!, model, messages, resolved, options?.webSearch);
+      ? await chatCompletionOpenAIChat(client._openai!, model, messages, resolved, options?.webSearch, onStreamProgress, onTextDelta)
+      : await chatCompletionOpenAIChatSync(client._openai!, model, messages, resolved, options?.webSearch, onTextDelta);
   } catch (error) {
     // Stream interrupted but partial content is usable — return truncated response
     if (error instanceof PartialResponseError) {
@@ -433,6 +435,7 @@ async function chatCompletionOpenAIChat(
   options: { readonly temperature: number; readonly maxTokens: number; readonly extra: Record<string, unknown> },
   webSearch?: boolean,
   onStreamProgress?: OnStreamProgress,
+  onTextDelta?: (text: string) => void,
 ): Promise<LLMResponse> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const createParams: any = {
@@ -458,6 +461,7 @@ async function chatCompletionOpenAIChat(
       if (delta) {
         chunks.push(delta);
         monitor.onChunk(delta);
+        onTextDelta?.(delta);
       }
       if (chunk.usage) {
         inputTokens = chunk.usage.prompt_tokens ?? 0;
@@ -494,6 +498,7 @@ async function chatCompletionOpenAIChatSync(
   messages: ReadonlyArray<LLMMessage>,
   options: { readonly temperature: number; readonly maxTokens: number; readonly extra: Record<string, unknown> },
   _webSearch?: boolean,
+  onTextDelta?: (text: string) => void,
 ): Promise<LLMResponse> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const syncParams: any = {
@@ -508,6 +513,7 @@ async function chatCompletionOpenAIChatSync(
 
   const content = response.choices[0]?.message?.content ?? "";
   if (!content) throw new Error("LLM returned empty response");
+  onTextDelta?.(content);
 
   return {
     content,
@@ -621,6 +627,7 @@ async function chatCompletionOpenAIResponses(
   options: { readonly temperature: number; readonly maxTokens: number },
   webSearch?: boolean,
   onStreamProgress?: OnStreamProgress,
+  onTextDelta?: (text: string) => void,
 ): Promise<LLMResponse> {
   const input: OpenAI.Responses.ResponseInputItem[] = messages.map((m) => ({
     role: m.role as "system" | "user" | "assistant",
@@ -650,6 +657,7 @@ async function chatCompletionOpenAIResponses(
       if (event.type === "response.output_text.delta") {
         chunks.push(event.delta);
         monitor.onChunk(event.delta);
+        onTextDelta?.(event.delta);
       }
       if (event.type === "response.completed") {
         inputTokens = event.response.usage?.input_tokens ?? 0;
@@ -686,6 +694,7 @@ async function chatCompletionOpenAIResponsesSync(
   messages: ReadonlyArray<LLMMessage>,
   options: { readonly temperature: number; readonly maxTokens: number },
   _webSearch?: boolean,
+  onTextDelta?: (text: string) => void,
 ): Promise<LLMResponse> {
   const input: OpenAI.Responses.ResponseInputItem[] = messages.map((m) => ({
     role: m.role as "system" | "user" | "assistant",
@@ -708,6 +717,7 @@ async function chatCompletionOpenAIResponsesSync(
     .join("");
 
   if (!content) throw new Error("LLM returned empty response");
+  onTextDelta?.(content);
 
   return {
     content,
@@ -814,6 +824,7 @@ async function chatCompletionAnthropic(
   options: { readonly temperature: number; readonly maxTokens: number },
   thinkingBudget: number = 0,
   onStreamProgress?: OnStreamProgress,
+  onTextDelta?: (text: string) => void,
 ): Promise<LLMResponse> {
   const systemText = messages
     .filter((m) => m.role === "system")
@@ -845,6 +856,7 @@ async function chatCompletionAnthropic(
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
         chunks.push(event.delta.text);
         monitor.onChunk(event.delta.text);
+        onTextDelta?.(event.delta.text);
       }
       if (event.type === "message_start") {
         inputTokens = event.message.usage?.input_tokens ?? 0;
@@ -883,6 +895,7 @@ async function chatCompletionAnthropicSync(
   messages: ReadonlyArray<LLMMessage>,
   options: { readonly temperature: number; readonly maxTokens: number },
   thinkingBudget: number = 0,
+  onTextDelta?: (text: string) => void,
 ): Promise<LLMResponse> {
   const systemText = messages
     .filter((m) => m.role === "system")
@@ -909,6 +922,7 @@ async function chatCompletionAnthropicSync(
     .join("");
 
   if (!content) throw new Error("LLM returned empty response");
+  onTextDelta?.(content);
 
   return {
     content,

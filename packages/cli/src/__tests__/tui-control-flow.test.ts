@@ -12,6 +12,7 @@ describe("tui control flow", () => {
     projectRoot = await mkdtemp(join(tmpdir(), "inkos-tui-control-"));
     await mkdir(join(projectRoot, "books", "harbor"), { recursive: true });
     await writeFile(join(projectRoot, "books", "harbor", "book.json"), "{}", "utf-8");
+    await writeFile(join(projectRoot, "inkos.json"), JSON.stringify({ language: "zh" }), "utf-8");
   });
 
   afterAll(async () => {
@@ -41,6 +42,7 @@ describe("tui control flow", () => {
     expect(result.session.activeBookId).toBe("harbor");
     expect(result.session.currentExecution?.status).toBe("waiting_human");
     expect(result.session.pendingDecision?.kind).toBe("review-next-step");
+    expect(result.session.pendingDecision?.summary).toContain("等待");
     expect(result.session.messages.at(0)?.role).toBe("user");
     expect(result.session.messages.at(-1)?.role).toBe("assistant");
   });
@@ -135,5 +137,27 @@ describe("tui control flow", () => {
 
     expect(result.session.activeBookId).toBe("beta");
     expect(result.session.messages.at(-1)?.content).toContain("beta");
+  });
+
+  it("formats interactive summaries in English when the project language is en", async () => {
+    await writeFile(join(projectRoot, "inkos.json"), JSON.stringify({ language: "en" }), "utf-8");
+    await persistProjectSession(projectRoot, createProjectSession(projectRoot));
+
+    const tools = {
+      listBooks: vi.fn(async () => ["harbor", "beta"]),
+      writeNextChapter: vi.fn(async () => ({ ok: true })),
+      reviseDraft: vi.fn(async () => ({ ok: true })),
+      patchChapterText: vi.fn(async () => ({ ok: true })),
+      renameEntity: vi.fn(async () => ({ ok: true })),
+      updateCurrentFocus: vi.fn(async () => ({ ok: true })),
+      updateAuthorIntent: vi.fn(async () => ({ ok: true })),
+      writeTruthFile: vi.fn(async () => ({ ok: true })),
+    };
+
+    const result = await processTuiInput(projectRoot, "/open beta", tools);
+
+    expect(result.session.messages.at(-1)?.content).toBe("Active book: beta");
+
+    await writeFile(join(projectRoot, "inkos.json"), JSON.stringify({ language: "zh" }), "utf-8");
   });
 });
