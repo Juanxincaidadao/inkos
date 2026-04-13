@@ -1,7 +1,7 @@
 ---
 name: inkos
 description: Autonomous novel writing CLI agent with web workbench (InkOS Studio) - use for creative fiction writing, novel generation, style imitation, chapter continuation/import, EPUB export, AIGC detection, and fan fiction. Native English support with 10 built-in English genre profiles (LitRPG, Progression Fantasy, Isekai, Cultivation, System Apocalypse, Dungeon Core, Romantasy, Sci-Fi, Tower Climber, Cozy Fantasy). Also supports Chinese web novel genres (xuanhuan, xianxia, urban, horror, other). Multi-agent pipeline, two-phase writer (creative + settlement), 33-dimension auditing, token usage analytics, creative brief input, structured logging (JSON Lines), multi-model routing, custom OpenAI-compatible provider support, and InkOS Studio web UI for visual book management, chapter review, real-time writing progress, market radar, and analytics.
-version: 2.2.0
+version: 2.3.0
 metadata: { "openclaw": { "emoji": "📖", "requires": { "bins": ["inkos", "node"], "env": [] }, "primaryEnv": "", "homepage": "https://github.com/Narcooo/inkos", "install": [{ "id": "npm", "kind": "node", "package": "@actalk/inkos", "label": "Install InkOS (npm)" }] } }
 ---
 
@@ -308,6 +308,39 @@ inkos fanfic init --title "What If" --from source.txt --mode au --genre other
 - Fanfic-specific audit dimensions and information boundary controls
 - Ensures new content stays consistent with source canon (or deliberately diverges in au/ooc modes)
 
+### Workflow 12: Rename Characters or Entities Across Entire Book
+
+```bash
+# Via interact
+inkos interact --json --message "把林烬改成张三"
+inkos interact --json --message "rename Lin Jin to Zhang San"
+
+# Via slash command
+inkos interact --json --message "/rename 林烬 => 张三"
+```
+- Scans all chapters + all truth files (story_bible, current_state, character_matrix, etc.)
+- Replaces every occurrence in one pass
+- Returns count of files touched
+
+### Workflow 13: Patch Specific Text in a Chapter
+
+```bash
+inkos interact --json --message "/replace 5 旧文本 => 新文本"
+```
+- Precisely replaces text in chapter 5 only
+- Marks chapter for review after patching
+
+### Workflow 14: Interactive TUI Dashboard
+
+```bash
+inkos
+```
+- Launches a full-screen Ink + React dashboard with conversational creation
+- Slash command autocomplete (Tab), input history (arrow keys)
+- Themed activity animations per operation (writing, auditing, revising, planning)
+- Bilingual i18n (Chinese / English)
+- Shares the same interaction kernel as `inkos interact` and Studio
+
 ## InkOS Studio (Web Workbench)
 
 `inkos studio` launches a local web UI (default port 4567) that provides a visual interface for all InkOS operations:
@@ -328,6 +361,8 @@ inkos fanfic init --title "What If" --from source.txt --mode au --genre other
 inkos studio              # Start on default port 4567
 inkos studio -p 8080      # Start on custom port
 ```
+
+The right-side **AI Assistant panel** in Studio shares the same interaction kernel as TUI and `inkos interact`. You can type natural language commands (rename entities, write chapters, audit, export) directly in the assistant panel.
 
 ## Advanced: Natural Language Agent Mode
 
@@ -474,6 +509,8 @@ inkos genre copy xuanhuan
 | `inkos studio` | Start web workbench | `-p` for port. Local web UI for book management |
 | `inkos fanfic show [book-id]` | Display parsed fanfic canon | Shows imported source material analysis |
 | `inkos fanfic refresh [book-id]` | Re-import and regenerate fanfic canon | `--from <file>` for updated source material |
+| `inkos interact` | Shared interaction endpoint | `--json`, `--message`, `--book`. Primary entry for OpenClaw |
+| `inkos` (no args) | Launch TUI dashboard | Full-screen Ink + React interactive dashboard |
 
 ## Error Handling
 
