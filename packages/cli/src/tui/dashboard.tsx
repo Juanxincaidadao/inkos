@@ -30,6 +30,7 @@ import {
   WARM_ACCENT, WARM_BORDER, WARM_MUTED, WARM_REPLY,
   STATUS_SUCCESS, STATUS_ERROR, STATUS_ACTIVE, STATUS_IDLE,
   ROLE_USER, ROLE_SYSTEM,
+  isAppleTerminal,
 } from "./theme.js";
 
 export interface InkTuiDashboardProps {
@@ -439,7 +440,20 @@ export function InkTuiApp(props: InkTuiAppProps): React.JSX.Element {
 }
 
 function ConversationRow(props: { readonly row: DashboardMessageRow }): React.JSX.Element {
-  const { role, content, label } = props.row;
+  const { role, content } = props.row;
+
+  // Terminal.app: use the same simple layout as the main branch to avoid
+  // triggering CoreGraphics crashes from complex Box nesting + ANSI codes.
+  if (isAppleTerminal) {
+    const prefix = role === "user" ? "│ " : role === "system" ? "· " : "◆ ";
+    const color = role === "user" ? ROLE_USER : role === "system" ? ROLE_SYSTEM : WARM_REPLY;
+    return (
+      <Box marginBottom={1}>
+        <Text color={role === "assistant" ? WARM_ACCENT : color}>{prefix}</Text>
+        <Text color={color}>{content}</Text>
+      </Box>
+    );
+  }
 
   if (role === "user") {
     return (

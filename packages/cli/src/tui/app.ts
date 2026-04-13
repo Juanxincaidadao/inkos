@@ -12,7 +12,6 @@ import { formatModeLabel, getTuiCopy, normalizeStageLabel, resolveTuiLocale, typ
 import { formatTuiResult } from "./output.js";
 import { loadProjectSession, persistProjectSession } from "./session-store.js";
 import { detectModelInfo, detectProjectLanguage, ensureProject, interactiveLlmSetup } from "./setup.js";
-import { isAppleTerminal } from "./theme.js";
 import { createInteractionTools } from "./tools.js";
 import { animateStartup } from "./effects.js";
 
@@ -110,32 +109,6 @@ export async function launchTui(
   projectRoot: string,
   toolsOverride?: InteractionRuntimeTools,
 ): Promise<void> {
-  // Terminal.app has a CoreGraphics bug: when it sees partial CJK UTF-8 bytes
-  // across multiple write() calls, the font glyph cache gets corrupted (text bytes
-  // end up in pointer fields → SIGSEGV in CGFontStrikeGetValue).
-  // Fix: buffer all writes within a single event-loop tick and flush once,
-  // so Terminal.app always sees complete frames. Same approach as Claude Code's
-  // single-write buffering in writeDiffToTerminal().
-  if (isAppleTerminal) {
-    let buffer = "";
-    const originalWrite = process.stdout.write.bind(process.stdout);
-    let scheduled = false;
-
-    process.stdout.write = ((chunk: string | Uint8Array): boolean => {
-      buffer += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
-      if (!scheduled) {
-        scheduled = true;
-        process.nextTick(() => {
-          scheduled = false;
-          const content = buffer;
-          buffer = "";
-          originalWrite(content);
-        });
-      }
-      return true;
-    }) as typeof process.stdout.write;
-  }
-
   projectRoot = await resolveProjectRoot(projectRoot);
   const { hasLlmConfig } = await ensureProject(projectRoot);
   const projectLanguage = await detectProjectLanguage(projectRoot);
@@ -186,15 +159,6 @@ export async function launchTui(
     return (originalStderrWrite as Function)(chunk, ...args);
   };
 
-  // Terminal.app only: enter alternate screen buffer to isolate Ink rendering
-  // from the primary terminal view. This prevents IME XPC corruption (the IME's
-  // NSRemoteView interacts with the primary screen; the alt screen is separate).
-  // Other terminals keep their scrollback.
-  const useAltScreen = isAppleTerminal;
-  if (useAltScreen) {
-    process.stdout.write("\x1b[?1049h");
-  }
-
   try {
     await animateStartup(version, basename(projectRoot), session.activeBookId, modelInfo);
 
@@ -208,16 +172,10 @@ export async function launchTui(
         tools,
         chatStreamBridge,
       }),
-      {
-        exitOnCtrlC: true,
-        ...(isAppleTerminal && { maxFps: 15 }),
-      },
+      { exitOnCtrlC: true },
     );
     await app.waitUntilExit();
   } finally {
-    if (useAltScreen) {
-      process.stdout.write("\x1b[?1049l");
-    }
     process.emitWarning = originalEmitWarning;
     process.stderr.write = originalStderrWrite;
   }
