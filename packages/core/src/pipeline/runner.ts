@@ -374,7 +374,9 @@ export class PipelineRunner {
     }
     const base = this.config.defaultLLMConfig;
     const provider = override.provider ?? base?.provider ?? "custom";
-    const apiKeySource = override.apiKeyEnv
+    const apiKeySource = override.apiKey
+      ? `config-override:${override.apiKey.slice(0, 4)}`
+      : override.apiKeyEnv
       ? `env:${override.apiKeyEnv}`
       : `base:${base?.apiKey ?? ""}`;
     const stream = override.stream ?? base?.stream ?? true;
@@ -388,7 +390,9 @@ export class PipelineRunner {
     ].join("|");
     let client = this.agentClients.get(cacheKey);
     if (!client) {
-      const apiKey = override.apiKeyEnv
+      const apiKey = override.apiKey
+        ? override.apiKey
+        : override.apiKeyEnv
         ? process.env[override.apiKeyEnv] ?? ""
         : base?.apiKey ?? "";
       client = createLLMClient({

@@ -17,6 +17,7 @@ interface AgentOverride {
   readonly model: string;
   readonly provider: string;
   readonly baseUrl: string;
+  readonly apiKey: string;
 }
 
 type OverridesMap = Record<string, AgentOverride>;
@@ -27,6 +28,7 @@ interface ProjectInfo {
   readonly model: string;
   readonly provider: string;
   readonly baseUrl: string;
+  readonly apiKey: string;
   readonly stream: boolean;
   readonly temperature: number;
   readonly maxTokens: number;
@@ -76,6 +78,7 @@ export function ConfigView({ nav, theme, t }: { nav: Nav; theme: Theme; t: TFunc
       maxTokens: data.maxTokens,
       stream: data.stream,
       language: data.language,
+      apiKey: data.apiKey,
     });
     setEditing(true);
   };
@@ -119,6 +122,13 @@ export function ConfigView({ nav, theme, t }: { nav: Nav; theme: Theme; t: TFunc
         {editing ? (
           <>
             <EditRow
+              label="API Key"
+              value={form.apiKey as string}
+              onChange={(v) => setForm({ ...form, apiKey: v })}
+              type="password"
+              c={c}
+            />
+            <EditRow
               label={t("config.language")}
               value={form.language as string}
               onChange={(v) => setForm({ ...form, language: v })}
@@ -151,6 +161,7 @@ export function ConfigView({ nav, theme, t }: { nav: Nav; theme: Theme; t: TFunc
           </>
         ) : (
           <>
+            <Row label="API Key" value={data.apiKey ? "********" : ""} mono />
             <Row label={t("config.language")} value={data.language === "en" ? t("config.english") : t("config.chinese")} />
             <Row label={t("config.temperature")} value={String(data.temperature)} mono />
             <Row label={t("config.maxTokens")} value={String(data.maxTokens)} mono />
@@ -176,7 +187,7 @@ export function ConfigView({ nav, theme, t }: { nav: Nav; theme: Theme; t: TFunc
 }
 
 function emptyOverride(): AgentOverride {
-  return { model: "", provider: "", baseUrl: "" };
+  return { model: "", provider: "", baseUrl: "", apiKey: "" };
 }
 
 function ModelRoutingSection({ theme, t }: { theme: Theme; t: TFunction }) {
@@ -230,6 +241,7 @@ function ModelRoutingSection({ theme, t }: { theme: Theme; t: TFunction }) {
               <th className="px-4 py-2.5 font-medium">{t("config.model")}</th>
               <th className="px-4 py-2.5 font-medium">{t("config.provider")}</th>
               <th className="px-4 py-2.5 font-medium">{t("config.baseUrl")}</th>
+              <th className="px-4 py-2.5 font-medium">API Key</th>
             </tr>
           </thead>
           <tbody>
@@ -261,6 +273,15 @@ function ModelRoutingSection({ theme, t }: { theme: Theme; t: TFunction }) {
                       type="text"
                       value={row.baseUrl}
                       onChange={(e) => updateAgent(agent, "baseUrl", e.target.value)}
+                      placeholder={t("config.optional")}
+                      className={`${c.input} rounded px-2 py-1 text-sm w-full`}
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <input
+                      type="password"
+                      value={row.apiKey}
+                      onChange={(e) => updateAgent(agent, "apiKey", e.target.value)}
                       placeholder={t("config.optional")}
                       className={`${c.input} rounded px-2 py-1 text-sm w-full`}
                     />
@@ -298,7 +319,7 @@ function EditRow({ label, value, onChange, type, options, c }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
-  type: "number" | "select";
+  type: "number" | "select" | "text" | "password";
   options?: ReadonlyArray<{ value: string; label: string }>;
   c: ReturnType<typeof useColors>;
 }) {
@@ -309,6 +330,8 @@ function EditRow({ label, value, onChange, type, options, c }: {
         <select value={value} onChange={(e) => onChange(e.target.value)} className={`${c.input} rounded px-2 py-1 text-sm w-32`}>
           {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+      ) : type === "text" || type === "password" ? (
+        <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className={`${c.input} rounded px-2 py-1 text-sm w-48 text-right`} />
       ) : (
         <input type="number" value={value} onChange={(e) => onChange(e.target.value)} className={`${c.input} rounded px-2 py-1 text-sm w-32 text-right`} />
       )}

@@ -100,8 +100,8 @@ export async function loadProjectConfig(
   // Global language override
   if (env.INKOS_DEFAULT_LANGUAGE) config.language = env.INKOS_DEFAULT_LANGUAGE;
 
-  // API key ONLY from env — never stored in inkos.json
-  const apiKey = env.INKOS_LLM_API_KEY;
+  // API key from env takes precedence, fallback to inkos.json
+  const apiKey = env.INKOS_LLM_API_KEY || (config.llm as any)?.apiKey;
   const provider = typeof llm.provider === "string" ? llm.provider : undefined;
   const baseUrl = typeof llm.baseUrl === "string" ? llm.baseUrl : undefined;
   const apiKeyOptional = isApiKeyOptionalForEndpoint({ provider, baseUrl });

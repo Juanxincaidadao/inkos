@@ -77,11 +77,14 @@ const strings = {
 
   // Sidebar
   "nav.system": { zh: "系统", en: "System" },
+  "nav.settings": { zh: "全局设定", en: "Settings & Presets" },
+  "nav.pipeline": { zh: "创作管线", en: "Agent Pipeline" },
+  "nav.maintenance": { zh: "后期与维护", en: "Post & Maintenance" },
   "nav.daemon": { zh: "守护进程", en: "Daemon" },
   "nav.logs": { zh: "日志", en: "Logs" },
   "nav.running": { zh: "运行中", en: "Running" },
-  "nav.agentOnline": { zh: "代理在线", en: "Agent Online" },
-  "nav.agentOffline": { zh: "代理离线", en: "Agent Offline" },
+  "nav.agentOnline": { zh: "引擎在线", en: "Agent Online" },
+  "nav.agentOffline": { zh: "引擎离线", en: "Agent Offline" },
   "nav.tools": { zh: "工具", en: "Tools" },
   "nav.style": { zh: "文风", en: "Style" },
   "nav.import": { zh: "导入", en: "Import" },

@@ -431,6 +431,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string) {
       model: currentConfig.llm.model,
       provider: currentConfig.llm.provider,
       baseUrl: currentConfig.llm.baseUrl,
+      apiKey: currentConfig.llm.apiKey,
       stream: currentConfig.llm.stream,
       temperature: currentConfig.llm.temperature,
       maxTokens: currentConfig.llm.maxTokens,
@@ -454,6 +455,9 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string) {
       }
       if (updates.stream !== undefined) {
         existing.llm.stream = updates.stream;
+      }
+      if (updates.apiKey !== undefined) {
+        existing.llm.apiKey = updates.apiKey;
       }
       if (updates.language === "zh" || updates.language === "en") {
         existing.language = updates.language;

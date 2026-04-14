@@ -60,7 +60,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
   }, [refetchBooks, refetchDaemon, sse.messages]);
 
   return (
-    <aside className="w-[260px] shrink-0 border-r border-border bg-background/80 backdrop-blur-md flex flex-col h-full overflow-hidden select-none">
+    <aside className="w-[260px] shrink-0 border-r border-border/50 bg-background/70 backdrop-blur-xl flex flex-col h-full overflow-hidden select-none shadow-[2px_0_15px_-3px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_20px_-3px_rgba(0,0,0,0.4)]">
       {/* Logo Area */}
       <div className="px-6 py-8">
         <button
@@ -123,11 +123,11 @@ export function Sidebar({ nav, activePage, sse, t }: {
           </div>
         </div>
 
-        {/* System Section */}
+        {/* Settings & Presets */}
         <div>
           <div className="px-3 mb-3">
             <span className="text-[11px] uppercase tracking-widest text-muted-foreground font-bold">
-              {t("nav.system")}
+              {t("nav.settings")}
             </span>
           </div>
           <div className="space-y-1">
@@ -138,10 +138,33 @@ export function Sidebar({ nav, activePage, sse, t }: {
               onClick={nav.toGenres}
             />
             <SidebarItem
+              label={t("nav.style")}
+              icon={<Wand2 size={16} />}
+              active={activePage === "style"}
+              onClick={nav.toStyle}
+            />
+            <SidebarItem
               label={t("nav.config")}
               icon={<Settings size={16} />}
               active={activePage === "config"}
               onClick={nav.toConfig}
+            />
+          </div>
+        </div>
+
+        {/* Agent Pipeline */}
+        <div>
+          <div className="px-3 mb-3">
+            <span className="text-[11px] uppercase tracking-widest text-muted-foreground font-bold">
+              {t("nav.pipeline")}
+            </span>
+          </div>
+          <div className="space-y-1">
+            <SidebarItem
+              label={t("nav.radar")}
+              icon={<TrendingUp size={16} />}
+              active={activePage === "radar"}
+              onClick={nav.toRadar}
             />
             <SidebarItem
               label={t("nav.daemon")}
@@ -160,31 +183,19 @@ export function Sidebar({ nav, activePage, sse, t }: {
           </div>
         </div>
 
-        {/* Tools Section */}
+        {/* Post & Maintenance */}
         <div>
           <div className="px-3 mb-3">
             <span className="text-[11px] uppercase tracking-widest text-muted-foreground font-bold">
-              {t("nav.tools")}
+              {t("nav.maintenance")}
             </span>
           </div>
           <div className="space-y-1">
-            <SidebarItem
-              label={t("nav.style")}
-              icon={<Wand2 size={16} />}
-              active={activePage === "style"}
-              onClick={nav.toStyle}
-            />
             <SidebarItem
               label={t("nav.import")}
               icon={<FileInput size={16} />}
               active={activePage === "import"}
               onClick={nav.toImport}
-            />
-            <SidebarItem
-              label={t("nav.radar")}
-              icon={<TrendingUp size={16} />}
-              active={activePage === "radar"}
-              onClick={nav.toRadar}
             />
             <SidebarItem
               label={t("nav.doctor")}
@@ -197,10 +208,13 @@ export function Sidebar({ nav, activePage, sse, t }: {
       </div>
 
       {/* Footer / Status Area */}
-      <div className="p-4 border-t border-border bg-secondary/40">
-        <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-card border border-border shadow-sm">
-          <div className={`w-2 h-2 rounded-full ${daemon?.running ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/40"}`} />
-          <span className="text-[11px] font-semibold text-foreground/80 uppercase tracking-wider">
+      <div className="p-4 border-t border-border/30 bg-secondary/20 backdrop-blur-md">
+        <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-card/60 backdrop-blur border border-border/50 shadow-[0_2px_10px_-3px_rgba(0,0,0,0.1)] relative overflow-hidden transition-all duration-500">
+          {daemon?.running && (
+            <div className="absolute inset-0 bg-emerald-500/5 animate-pulse" />
+          )}
+          <div className={`w-2 h-2 rounded-full relative z-10 ${daemon?.running ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" : "bg-muted-foreground/40"}`} />
+          <span className="text-[11px] font-semibold text-foreground/80 uppercase tracking-wider relative z-10">
             {daemon?.running ? t("nav.agentOnline") : t("nav.agentOffline")}
           </span>
         </div>
@@ -220,13 +234,16 @@ function SidebarItem({ label, icon, active, onClick, badge, badgeColor }: {
   return (
     <button
       onClick={onClick}
-      className={`w-full group flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
+      className={`w-full group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-300 hover:scale-[1.01] active:scale-95 ${
         active
-          ? "bg-secondary text-foreground font-semibold shadow-sm border border-border"
-          : "text-foreground font-medium hover:text-foreground hover:bg-secondary/50"
+          ? "bg-secondary text-foreground font-semibold shadow-sm border border-border/40"
+          : "text-foreground font-medium hover:text-foreground hover:bg-secondary/40"
       }`}
     >
-      <span className={`transition-colors ${active ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`}>
+      {active && (
+        <div className="absolute -left-1 top-[20%] bottom-[20%] w-1 bg-primary rounded-r-md shadow-[0_0_6px_currentColor] text-primary" />
+      )}
+      <span className={`transition-colors duration-300 relative z-10 ${active ? "text-primary drop-shadow-[0_0_8px_rgba(var(--primary),0.3)]" : "text-muted-foreground group-hover:text-foreground"}`}>
         {icon}
       </span>
       <span className="flex-1 text-left">{label}</span>

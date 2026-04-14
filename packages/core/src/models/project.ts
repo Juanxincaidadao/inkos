@@ -65,6 +65,7 @@ export const AgentLLMOverrideSchema = z.object({
   provider: z.enum(["anthropic", "openai", "custom"]).optional(),
   baseUrl: z.string().url().optional(),
   apiKeyEnv: z.string().optional(),
+  apiKey: z.string().optional(),
   stream: z.boolean().optional(),
 });
 
